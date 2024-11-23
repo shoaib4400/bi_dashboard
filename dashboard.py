@@ -7,10 +7,9 @@ from plotly.subplots import make_subplots
 import calendar
 from streamlit_extras.metric_cards import style_metric_cards
 
-# Set page config for a wider layout
 st.set_page_config(layout="wide", page_title="Quiz Analytics Dashboard")
 
-# Custom CSS for better styling
+# Custom CSS
 st.markdown("""
     <style>
     .stTabs [data-baseweb="tab-list"] {
@@ -30,7 +29,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Load and prepare data
-@st.cache_data
 def load_data():
     correct_answers = pd.read_excel('Correct_Answers.xlsx')
     ques_ans = pd.read_excel('Que_Ans.xlsx')
@@ -51,23 +49,24 @@ def top_n_most_active_voters(voter_df, n=10):
 def top_n_early_birds(voter_df, n=10):
     # Get first response time for each user per question
     first_responses = voter_df.groupby(['question_text', 'voter_name'])['voting_time'].min().reset_index()
+    
     # Calculate response time rank for each question
     first_responses['rank'] = first_responses.groupby('question_text')['voting_time'].rank()
+
     # st.write(first_responses)
-    # Get average rank for each user
-    # avg_ranks = first_responses.groupby('voter_name')['rank'].mean().reset_index()
-    # return avg_ranks.nsmallest(n, 'rank')
 
     # Filter to keep only the first responders (rank == 1)
     first_responders = first_responses[first_responses['rank'] == 1]
+
     # Count how many times each voter is the first responder
     first_count = first_responders.groupby('voter_name').size().reset_index(name='first_count')
-    # Return
+
     return first_count.nlargest(n, 'first_count')
 
 
 # 3. Top N questions with more incorrect answers
 def top_n_incorrect_questions(voter_df, correct_answers_df, n=10):
+    
     # Ensure correct_answers_df has unique question-text rows
     answers_df = correct_answers_df.groupby('que_text')['ans_text'].apply(set).reset_index()
 
@@ -87,7 +86,7 @@ def top_n_incorrect_questions(voter_df, correct_answers_df, n=10):
     ).reset_index()
 
     # Calculate incorrect ratio and select top N questions
-    question_stats['incorrect_ratio'] = question_stats['incorrect_votes'] / question_stats['total_votes']
+    question_stats['incorrect_ratio'] = round(question_stats['incorrect_votes'] / question_stats['total_votes'], 2)
     return question_stats.nlargest(n, 'incorrect_ratio')
 
 # 4. Top N easy questions
@@ -111,7 +110,7 @@ def top_n_easy_questions(voter_df, correct_answers_df, n=10):
     ).reset_index()
 
     # Calculate correct ratio and select top N questions
-    question_stats['correct_ratio'] = question_stats['correct_votes'] / question_stats['total_votes']
+    question_stats['correct_ratio'] = round(question_stats['correct_votes'] / question_stats['total_votes'], 2)
     return question_stats.nlargest(n, 'correct_ratio')
 
 # 5. Top N least active followers/voters
@@ -149,7 +148,7 @@ def top_n_good_performers(voter_df, correct_answers_df, n=10):
     # st.write(voter_stats)
 
     # Calculate correct ratio and select top N voters
-    voter_stats['correct_ratio'] = voter_stats['correct_votes'] / voter_stats['total_votes']
+    voter_stats['correct_ratio'] = round(voter_stats['correct_votes'] / voter_stats['total_votes'], 2)
     return voter_stats.nlargest(n, 'correct_ratio')
 
 # 8. Top N difficult questions (least votes)
@@ -166,6 +165,7 @@ def top_n_fast_responded_questions(voter_df, ques_ans_df, n=10):
         left_on='question_text',
         right_on='que_text'
     )
+
     # st.write(question_response)
 
     question_response = question_response.groupby('question_text').agg(
@@ -191,6 +191,7 @@ def top_n_slow_responded_questions(voter_df, ques_ans_df, n=10):
         left_on='question_text',
         right_on='que_text'
     )
+
     # st.write(question_response)
 
     question_response = question_response.groupby('question_text').agg(
@@ -240,7 +241,18 @@ def get_summary_metrics(voter_df, correct_answers_df):
 def get_hourly_activity(voter_df):
     """Analyze activity by hour of day"""
     voter_df['hour'] = voter_df['voting_time'].dt.hour
+
+    # Sort by hour of day
+    # voter_df = voter_df.sort_values('hour')
+
+    # st.write(voter_df)
+
     hourly_activity = voter_df.groupby('hour').size().reset_index(name='count')
+
+    # hourly_activity = hourly_activity.sort_values('hour')
+
+    # st.write(hourly_activity)
+
     return hourly_activity
 
 def get_weekday_activity(voter_df):
@@ -254,15 +266,16 @@ def get_weekday_activity(voter_df):
     )
     return weekday_activity.sort_values('weekday')
 
-# Main dashboard
+# def newAnalysis(voter_df, correct_answers_df, ques_ans_df):
+
 def main():
     st.title("📊 Quiz Participation Analytics Dashboard")
-    
+
     # Load data
     correct_answers, ques_ans, voter = load_data()
 
     # Color theme for plots
-    color_theme = px.colors.sequential.Viridis
+    color_theme = px.colors.sequential.Blackbody_r
     
     # Sidebar controls
     with st.sidebar:
@@ -282,7 +295,6 @@ def main():
         st.metric("✅ Overall Accuracy", metrics['Overall Accuracy'])
     style_metric_cards()
     
-    # Create tabs with icons
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📈 Participation Trends",
         "👥 Voter Analysis",
@@ -310,6 +322,12 @@ def main():
                                 labels={'count': 'Number of Votes', 'hour': 'Hour of the Day'})
             st.plotly_chart(fig_hourly, use_container_width=True, key='hourly_activity')
 
+            # st.write(hourly_activity)
+
+            # Pi chart 
+            fig = px.pie(hourly_activity, values='count', names='hour', title='Activity by Hour of Day')
+            st.plotly_chart(fig, use_container_width=True, key='hourly_activity_pie')
+
         with col2:
 
             weekday_activity = get_weekday_activity(voter)
@@ -317,6 +335,11 @@ def main():
                                 labels={'count': 'Number of Votes', 'weekday': 'Day of the Week'},
                                 color='count', color_continuous_scale=color_theme)
             st.plotly_chart(fig_weekday, use_container_width=True, key='weekday_activity')
+
+            # Spider chart
+            fig_spider = go.Figure(data=go.Scatterpolar(r=weekday_activity['count'], theta=weekday_activity['weekday'], fill='toself'))
+            fig_spider.update_layout(title="Activity by Day of Week (Spider Chart)")
+            st.plotly_chart(fig_spider, use_container_width=True, key='weekday_spider')            
 
     with tab2:
         st.header("Voter Analysis")
